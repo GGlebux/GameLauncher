@@ -6,6 +6,195 @@ from tetris import Tetris
 from race import CarGame
 
 
+class LoginScreen:
+    def __init__(self):
+        pygame.init()
+
+        self.WIDTH, self.HEIGHT = 800, 600
+        self.WHITE = (255, 255, 255)
+        self.BLACK = (0, 0, 0)
+        self.GRAY = (200, 200, 200)
+        self.RED = (255, 0, 0)
+        self.BLUE = (135, 206, 250)
+        self.PURPLE = (128, 0, 128)
+        self.BLUEBLACK = (0, 83, 138)
+
+        self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        self.WIDTH, self.HEIGHT = self.screen.get_size()
+        pygame.display.set_caption("Login")
+
+        self.font = pygame.font.SysFont("Verdana", 24)
+        self.header_font = pygame.font.SysFont("Verdana", 48, bold=True)
+        self.label_font = pygame.font.SysFont("Verdana", 18)
+        self.small_label_font = pygame.font.SysFont("Verdana", 16)
+
+        self.username_box = pygame.Rect(self.WIDTH // 2 - 200, self.HEIGHT // 2 - 80, 400, 40)
+        self.password_box = pygame.Rect(self.WIDTH // 2 - 200, self.HEIGHT // 2 - 10, 400, 40)
+        self.login_button = pygame.Rect(self.WIDTH // 2 - 200, self.HEIGHT // 2 + 60, 400, 40)
+
+        self.username = ""
+        self.password = ""
+        self.active_box = None
+        self.error_message = ""
+
+        self.gradient_surface = pygame.Surface((self.WIDTH, self.HEIGHT))
+        self.create_gradient()
+
+    def create_gradient(self):
+        for y in range(self.HEIGHT):
+            for x in range(self.WIDTH):
+                t = (x + y) / (self.WIDTH + self.HEIGHT)
+                r = int(self.BLUE[0] * (1 - t) + self.PURPLE[0] * t)
+                g = int(self.BLUE[1] * (1 - t) + self.PURPLE[1] * t)
+                b = int(self.BLUE[2] * (1 - t) + self.PURPLE[2] * t)
+                self.gradient_surface.set_at((x, y), (r, g, b))
+
+    def check_credentials(self, username, password):
+        try:
+            conn = sqlite3.connect("users.db", timeout=10)
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
+            result = cursor.fetchone()
+            return result is not None
+        except Exception as e:
+            print("Database error:", e)
+            return False
+        finally:
+            if 'cursor' in locals():
+                cursor.close()
+            if 'conn' in locals():
+                conn.close()
+
+    def register_user(self, username, password):
+        try:
+            conn = sqlite3.connect("users.db", timeout=10)
+            cursor = conn.cursor()
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE,
+                password TEXT
+            )
+            """)
+            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False 
+        except Exception as e:
+            print("Database error:", e)
+            return False
+        finally:
+            if 'cursor' in locals():
+                cursor.close()
+            if 'conn' in locals():
+                conn.close()
+
+    def run(self):
+        running = True
+        registration_mode = False
+        login_attempts = 0  
+
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if self.username_box.collidepoint(event.pos):
+                        self.active_box = "username"
+                    elif self.password_box.collidepoint(event.pos):
+                        self.active_box = "password"
+                    elif self.login_button.collidepoint(event.pos):
+                        if registration_mode:
+                            if self.register_user(self.username, self.password):
+                                self.error_message = "Регистрация успешна! Войдите в аккаунт."
+                                self.username = ""
+                                self.password = ""
+                                registration_mode = False
+                            else:
+                                self.error_message = "Имя пользователя уже существует или данные недопустимы."
+                        else:
+                            if self.check_credentials(self.username, self.password):
+                                return True
+                            else:
+                                login_attempts += 1
+                                if login_attempts >= 3:
+                                    print("Вы использовали все попытки входа. Программа закрывается.")
+                                    pygame.quit()
+                                    sys.exit()
+                                self.error_message = f"Неверное имя пользователя или пароль ({3 - login_attempts} попыток осталось)"
+                    elif register_text_highlight_rect.collidepoint(event.pos):
+                        registration_mode = True
+                        self.error_message = ""
+                    else:
+                        self.active_box = None
+                elif event.type == pygame.KEYDOWN:
+                    if self.active_box == "username":
+                        if event.key == pygame.K_BACKSPACE:
+                            self.username = self.username[:-1]
+                        else:
+                            self.username += event.unicode
+                    elif self.active_box == "password":
+                        if event.key == pygame.K_BACKSPACE:
+                            self.password = self.password[:-1]
+                        else:
+                            self.password += event.unicode
+
+            self.screen.blit(self.gradient_surface, (0, 0))
+
+  
+            header_text = "РЕГИСТРАЦИЯ" if registration_mode else "АВТОРИЗАЦИЯ"
+            header_surface = self.header_font.render(header_text, True, self.WHITE)
+            header_rect = header_surface.get_rect(center=(self.WIDTH // 2, self.HEIGHT // 2 - 150))
+            self.screen.blit(header_surface, header_rect)
+
+            username_label = self.label_font.render("username", True, self.WHITE)
+            password_label = self.label_font.render("password", True, self.WHITE)
+            self.screen.blit(username_label, (self.username_box.x, self.username_box.y - 25))
+            self.screen.blit(password_label, (self.password_box.x, self.password_box.y - 25))
+
+
+            pygame.draw.rect(self.screen, self.GRAY if self.active_box == "username" else self.BLACK, self.username_box, width=2, border_radius=10)
+            pygame.draw.rect(self.screen, self.GRAY if self.active_box == "password" else self.BLACK, self.password_box, width=2, border_radius=10)
+
+
+            username_surface = self.font.render(self.username, True, self.BLACK)
+            password_surface = self.font.render("•" * len(self.password), True, self.BLACK)
+
+
+            username_text_rect = username_surface.get_rect(center=(self.username_box.x + self.username_box.width // 2, self.username_box.y + self.username_box.height // 2))
+            password_text_rect = password_surface.get_rect(center=(self.password_box.x + self.password_box.width // 2, self.password_box.y + self.password_box.height // 2))
+
+            self.screen.blit(username_surface, username_text_rect)
+            self.screen.blit(password_surface, password_text_rect)
+
+  
+            pygame.draw.rect(self.screen, self.WHITE, self.login_button, border_radius=20)
+            pygame.draw.rect(self.screen, self.BLACK, self.login_button, width=2, border_radius=20)
+            login_text = self.font.render("Вход" if not registration_mode else "Регистрация", True, self.BLACK)
+            login_text_rect = login_text.get_rect(center=self.login_button.center)
+            self.screen.blit(login_text, login_text_rect)
+
+      
+            register_text_normal = self.label_font.render("Нет аккаунта?", True, self.WHITE)
+            register_text_highlight = self.label_font.render("Зарегистрируйся", True, self.BLUEBLACK)
+            
+
+            register_text_normal_rect = register_text_normal.get_rect(center=(self.login_button.centerx - 70, self.login_button.bottom + 30))
+            register_text_highlight_rect = register_text_highlight.get_rect(topleft=(register_text_normal_rect.right + 5, register_text_normal_rect.top))
+
+            self.screen.blit(register_text_normal, register_text_normal_rect.topleft)
+            self.screen.blit(register_text_highlight, register_text_highlight_rect.topleft)
+
+            if self.error_message:
+                error_font = pygame.font.SysFont("Verdana", 24, bold=True)
+                error_surface = error_font.render(self.error_message, True, self.RED)
+                error_rect = error_surface.get_rect(center=(self.WIDTH // 2, self.HEIGHT // 2 + 200))  # Центровка по горизонтали
+                self.screen.blit(error_surface, error_rect)
+
+            pygame.display.flip()
+
 
 class GradientMenu:
     def __init__(self):
@@ -174,5 +363,9 @@ class GradientMenu:
                 sys.exit()
 
 if __name__ == "__main__":
-    menu = GradientMenu()
-    menu.run()
+
+    login_screen = LoginScreen()
+    if login_screen.run():
+
+        menu = GradientMenu()
+        menu.run()
